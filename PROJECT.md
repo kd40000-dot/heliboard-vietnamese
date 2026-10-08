@@ -1,17 +1,31 @@
 # HeliBoard Vietnamese
 
-Canonical repository for our HeliBoard Vietnamese Telex work: https://github.com/kd40000-dot/heliboard-vietnamese
+Canonical repository for all current and future work on this project:
+https://github.com/kd40000-dot/heliboard-vietnamese
 
-This repository will contain the HeliBoard source snapshot and the ViKey-Telex integration, tests, attribution, and build documentation. Use this repository for future development.
+The complete HeliBoard source snapshot, Vietnamese Telex integration, tests, licenses, and build notes are checked in here. Edit the source files directly for future changes.
 
-## Provenance
+## Provenance and restore point
 
 - HeliBoard: https://github.com/HeliBorg/HeliBoard at `415c45f15c47de3de74eeeb9fdb8e56e46d1389a`.
 - Android ViKey-Telex: https://github.com/ngocthanhgl/ViKey-Telex at `ac2db266228331f59f157d12bb5a07112a73853c`.
-- Telex engine attribution and license are retained in the source and `docs/vietnamese-telex.md`.
+- Original integration patch: `.project-migration/telex.patch`.
+- Original upstream CI workflows are preserved in `docs/upstream-workflows/` as reference files.
+- Attribution, behavior, and examples: `docs/vietnamese-telex.md`.
 
-## Checkpoint
+## Validation checkpoint
 
-Vietnamese Telex implementation is complete. The debug APK built successfully and 15 focused tests passed on 2026-10-03. Physical-device validation was not recorded in this conversation.
+The debug APK built successfully and all 15 focused automated tests passed on 2026-10-03. Results are recorded in `docs/checkpoint-validation.json`. No physical-device result was recorded in this conversation. Repository migration does not change application behavior.
 
-The original integration patch is preserved under `.project-migration/` as a restore point. The import workflow populates the source only when `app/build.gradle.kts` is absent, and preserves the existing project notes and workflows.
+## Build and test
+
+Use JDK 21 for Robolectric's Android 16 runtime and install the SDK/NDK versions declared in the Gradle files.
+
+```sh
+./gradlew :app:testDebugUnitTest --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*'
+./gradlew :app:assembleDebugNoMinify
+```
+
+The debug APK uses `helium314.keyboard.debug` and installs alongside the official release. Keep generated APKs in release assets or build artifacts, and keep signing keys out of source control.
+
+The one-time import workflow does nothing after `app/build.gradle.kts` exists. Do not use it to overwrite later work.
