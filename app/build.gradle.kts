@@ -13,7 +13,7 @@ android {
         applicationId = "helium314.keyboard"
         minSdk = 21
         targetSdk = 37
-        versionCode = 4101
+        versionCode = providers.gradleProperty("heliboardVersionCode").orNull?.toIntOrNull() ?: 4101
         versionName = "4.1"
         ndk {
             abiFilters.clear()
