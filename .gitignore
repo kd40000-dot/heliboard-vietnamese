@@ -15,3 +15,12 @@ tools/*.txt
 *.patch
 *.diff
 *.sh
+
+# Private APK signing material: never check in signing secrets.
+*.p12
+*.pfx
+*.jks
+*.keystore
+*signing-password*
+*signing-secret*
+*SIGNING-KEY-BACKUP*
