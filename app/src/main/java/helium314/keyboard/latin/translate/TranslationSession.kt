@@ -8,7 +8,6 @@ import android.view.inputmethod.EditorInfo
 import android.view.inputmethod.InputConnection
 import android.view.inputmethod.InputMethodSubtype
 import android.widget.Toast
-import helium314.keyboard.compat.locale
 import helium314.keyboard.latin.LatinIME
 import helium314.keyboard.latin.R
 import helium314.keyboard.latin.RichInputMethodManager
@@ -61,9 +60,16 @@ object TranslationSession {
         if (isEditor(ime, info)) {
             if (!s.entered) {
                 s.entered = true
-                val english = SubtypeSettings.getEnabledSubtypes().firstOrNull { it.locale().language == "en" }
-                    ?: SubtypeSettings.getAllAvailableSubtypes().firstOrNull { it.locale().toLanguageTag() == "en-US" }
-                    ?: SubtypeSettings.getAllAvailableSubtypes().firstOrNull { it.locale().language == "en" }
+                // InputMethodSubtype.locale is a locale string (e.g. en_US), not a Locale.
+                // Prefer a configured English layout, falling back to any built-in English layout.
+                val isEnglish: (InputMethodSubtype) -> Boolean = {
+                    it.locale.substringBefore('_').substringBefore('-').equals("en", ignoreCase = true)
+                }
+                val english = SubtypeSettings.getEnabledSubtypes().firstOrNull(isEnglish)
+                    ?: SubtypeSettings.getAllAvailableSubtypes().firstOrNull {
+                        it.locale.replace('_', '-').equals("en-US", ignoreCase = true)
+                    }
+                    ?: SubtypeSettings.getAllAvailableSubtypes().firstOrNull(isEnglish)
                 if (english != null) {
                     imm.beginTemporarySubtype()
                     ime.switchToSubtype(english)

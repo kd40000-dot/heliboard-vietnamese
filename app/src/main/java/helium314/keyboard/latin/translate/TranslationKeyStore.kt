@@ -15,7 +15,8 @@ import javax.crypto.spec.GCMParameterSpec
 
 /** Encrypted, excluded from backup, and never included in normal keyboard preferences. */
 internal class TranslationKeyStore(context: Context) {
-    private val storage = if (Build.VERSION.SDK_INT >= 24) context.createCredentialProtectedStorageContext() else context
+    // The normal app context is credential-protected; noBackupFilesDir is excluded from backups.
+    private val storage = context
     private val file get() = File(storage.noBackupFilesDir, "deepl-key")
     private val alias = "helium314.deepl"
 
