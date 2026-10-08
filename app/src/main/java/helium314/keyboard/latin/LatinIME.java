@@ -6,6 +6,8 @@
 
 package helium314.keyboard.latin;
 
+import helium314.keyboard.latin.translate.TranslationSession;
+
 import android.annotation.SuppressLint;
 import android.app.AlertDialog;
 import android.content.BroadcastReceiver;
@@ -843,7 +845,8 @@ public class LatinIME extends InputMethodService implements
         if (hasSuggestionStripView()) {
             mSuggestionStripView.setRtl(mRichImm.getCurrentSubtype().isRtlSubtype());
         }
-        mSettings.saveSubtypeForApp(mRichImm.getCurrentSubtype(), getCurrentInputEditorInfo().packageName);
+        if (!mRichImm.getHasTemporarySubtype())
+            mSettings.saveSubtypeForApp(mRichImm.getCurrentSubtype(), getCurrentInputEditorInfo().packageName);
     }
 
     /** alias to onCurrentInputMethodSubtypeChanged with a better name, as it's also used for internal switching */
@@ -853,6 +856,7 @@ public class LatinIME extends InputMethodService implements
 
     private void onStartInputInternal(EditorInfo editorInfo, boolean restarting) {
         super.onStartInput(editorInfo, restarting);
+        if (TranslationSession.prepareEditor(this, editorInfo)) return;
 
         RichInputMethodSubtype subtypeForApp = editorInfo == null
             ? null :
@@ -1014,6 +1018,7 @@ public class LatinIME extends InputMethodService implements
                 currentSettingsValues.mGestureTrailEnabled,
                 currentSettingsValues.mGestureFloatingPreviewTextEnabled);
 
+        TranslationSession.deliver(this, editorInfo);
         if (TRACE) Debug.startMethodTracing("/data/trace/latinime");
     }
 
@@ -1428,6 +1433,11 @@ public class LatinIME extends InputMethodService implements
     // This method is public for testability of LatinIME, but also in the future it should
     // completely replace #onCodeInput.
     public void onEvent(@NonNull final Event event) {
+        if (event.getKeyCode() == KeyCode.TRANSLATE) {
+            mInputLogic.finishInput();
+            TranslationSession.launch(this);
+            return;
+        }
         if (KeyCode.VOICE_INPUT == event.getKeyCode()) {
             mRichImm.switchToShortcutIme(this);
         }

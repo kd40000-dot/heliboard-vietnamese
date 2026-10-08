@@ -34,6 +34,11 @@ class RichInputMethodManager private constructor() {
     private lateinit var imm: InputMethodManager
     private lateinit var inputMethodInfoCache: InputMethodInfoCache
     private lateinit var currentRichInputMethodSubtype: RichInputMethodSubtype
+    private var temporarySubtype: InputMethodSubtype? = null
+    val hasTemporarySubtype get() = temporarySubtype != null
+    fun beginTemporarySubtype() { temporarySubtype = currentSubtype.rawSubtype }
+    fun endTemporarySubtype() { temporarySubtype = null }
+
     private val scope = CoroutineScope(Dispatchers.Default)
 
     private val isInitializedInternal get() = this::imm.isInitialized
@@ -112,7 +117,8 @@ class RichInputMethodManager private constructor() {
     }
 
     fun onSubtypeChanged(newSubtype: InputMethodSubtype) {
-        SubtypeSettings.setSelectedSubtype(context.prefs(), newSubtype)
+        if (hasTemporarySubtype) temporarySubtype = newSubtype
+        else SubtypeSettings.setSelectedSubtype(context.prefs(), newSubtype)
         currentRichInputMethodSubtype = RichInputMethodSubtype.get(newSubtype)
         scope.launch { updateShortcutIme() }
         if (DEBUG) {
@@ -122,7 +128,7 @@ class RichInputMethodManager private constructor() {
 
     fun refreshSubtypeCaches() {
         inputMethodInfoCache.clear()
-        currentRichInputMethodSubtype = RichInputMethodSubtype.get(SubtypeSettings.getSelectedSubtype(context.prefs()))
+        currentRichInputMethodSubtype = RichInputMethodSubtype.get(temporarySubtype ?: SubtypeSettings.getSelectedSubtype(context.prefs()))
         scope.launch { updateShortcutIme() }
     }
 

@@ -1,0 +1,23 @@
+<resources>
+    <string name="translate">Translate</string>
+    <string name="translate_title">DeepL translator</string>
+    <string name="translate_close">Close</string>
+    <string name="translate_from_english">English → </string>
+    <string name="translate_hint">Type English text to translate</string>
+    <string name="translate_insert">Translate &amp; insert</string>
+    <string name="translate_disclosure">Tap Translate &amp; insert to send this box’s text to DeepL and insert the translation in your app.</string>
+    <string name="translate_key">API key</string>
+    <string name="translate_key_hint">DeepL API Free or API Pro key</string>
+    <string name="translate_save_key">Save key (empty to remove)</string>
+    <string name="translate_need_key">Add your DeepL API key using the API key button.</string>
+    <string name="translate_key_invalid">DeepL could not accept this API key. Check the key and your API subscription.</string>
+    <string name="translate_key_storage_error">Could not securely save the key. Android 6 or newer with an unlocked device is required.</string>
+    <string name="translate_working">Translating…</string>
+    <string name="translate_quota">Your DeepL API quota has been reached.</string>
+    <string name="translate_rate_limit">DeepL is busy. Please try again shortly.</string>
+    <string name="translate_language_error">DeepL could not translate this language pair. Try another target language.</string>
+    <string name="translate_network_error">Translation failed. Check your connection and try again. Your text is still here.</string>
+    <string name="translate_text_only">Open the translator from a non-password text field.</string>
+    <string name="translate_editor_changed">The destination field changed. Translation was not inserted; reopen the translator from the intended field.</string>
+    <string name="translate_editor_unsupported">This app does not expose enough editor information to safely return a translation.</string>
+</resources>
