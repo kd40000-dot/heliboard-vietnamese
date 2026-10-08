@@ -29,3 +29,10 @@ Use JDK 21 for Robolectric's Android 16 runtime and install the SDK/NDK versions
 The debug APK uses `helium314.keyboard.debug` and installs alongside the official release. Keep generated APKs in release assets or build artifacts, and keep signing keys out of source control.
 
 The one-time import workflow does nothing after `app/build.gradle.kts` exists. Do not use it to overwrite later work.
+
+
+## Translator
+
+See [translator setup and behavior](docs/translator.md). The GitHub Actions
+`Translator APK and focused tests` workflow builds the translator APK and runs
+the DeepL client, destination guards, and Vietnamese Telex regression tests.
