@@ -1,0 +1,38 @@
+name: Import HeliBoard Telex source
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/import-source.yml', '.project-migration/telex.patch']
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: import-heliboard-source
+  cancel-in-progress: false
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Import pinned source and apply Telex changes
+        shell: bash
+        run: |
+          set -euo pipefail
+          if test -f app/build.gradle.kts; then
+            echo "Source already imported; preserving current work."
+            exit 0
+          fi
+          source_dir="$(mktemp -d)"
+          git -C "$source_dir" init -q
+          git -C "$source_dir" remote add origin https://github.com/HeliBorg/HeliBoard.git
+          git -C "$source_dir" fetch --depth=1 origin 415c45f15c47de3de74eeeb9fdb8e56e46d1389a
+          git -C "$source_dir" archive FETCH_HEAD | tar -x --exclude='.github/workflows/*'
+          git apply --check .project-migration/telex.patch
+          git apply .project-migration/telex.patch
+          mkdir -p docs/upstream-workflows
+          git -C "$source_dir" archive FETCH_HEAD .github/workflows | tar -x -C "$source_dir"
+          cp "$source_dir"/.github/workflows/* docs/upstream-workflows/
+          git add --all
+          git diff --cached --check
+          git -c user.name='github-actions[bot]' -c user.email='41898282+github-actions[bot]@users.noreply.github.com' commit -m "Import pinned HeliBoard source with Vietnamese Telex integration"
+          git push origin HEAD:main
