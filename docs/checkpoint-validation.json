@@ -1,0 +1,30 @@
+{
+  "checkpoint": "Vietnamese Telex integration",
+  "upstream_revision": "415c45f15c47de3de74eeeb9fdb8e56e46d1389a",
+  "engine_revision": "ac2db266228331f59f157d12bb5a07112a73853c",
+  "tested_at": "2026-10-03",
+  "build": {
+    "variant": "debugNoMinify",
+    "result": "success",
+    "application_id": "helium314.keyboard.debug"
+  },
+  "tests": [
+    {
+      "suite": "VietnameseTelexTest",
+      "tests": 4,
+      "failures": 0
+    },
+    {
+      "suite": "TelexChainTest",
+      "tests": 5,
+      "failures": 0
+    },
+    {
+      "suite": "InputLogicTest (telex methods)",
+      "tests": 6,
+      "failures": 0
+    }
+  ],
+  "physical_device_test": "not recorded",
+  "notes": "Historic validation result; no application code changed during repository migration."
+}
