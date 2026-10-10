@@ -1,32 +1,33 @@
-# DeepL translator
+# Gemini inline translator
 
-Open **Translate** from the keyboard toolbar. The panel has its own source text
-box above the keyboard. It defaults to English → Vietnamese. Tap **API key** to
-enter a DeepL API Free or API Pro key on the device, then **Save key**. A normal
-DeepL translator subscription is not an API subscription. Free keys ending in
-`:fx` use api-free.deepl.com; other keys use api.deepl.com.
+Open **Translate** in HeliBoard's toolbar while editing a message in Zalo or another text field.
+A compact panel appears directly above the normal keyboard. Type an English message and
+a Vietnamese preview appears after you stop typing for about one second. Tap **Insert**
+to place the preview into the original message field. **Insert does not press Send**.
 
-Type in the source box and tap **Translate & insert**. The panel closes and the
-translated text is inserted at the original app selection. This does not press
-Send in the app. Closing the panel cancels. Keyboard English is temporary and
-the previous language is restored on return, including Vietnamese Telex.
-English need not be enabled in the language list. Translation is explicit, not
-sent on every keystroke. The first version accepts English source text and
-provides a small target-language menu with Vietnamese as the default.
+The default profile translates as **anh** speaking to **em** (Tran). The direction
+button switches to Vietnamese → English. Each translation is a separate request:
+no chat history, clipboard content, or other app text is submitted automatically.
+Corrections or changes invalidate outstanding previews.
 
-Only submitted source text goes to DeepL. The API key is encrypted with Android
-Keystore and stored outside backups, separate from exported keyboard settings.
-Android 6+ is required for key storage. Saving an empty key deletes it. This
-feature adds Internet permission; ordinary keyboard input makes no DeepL calls.
-Errors preserve the source box. Editing while a request is pending invalidates
-its result. Closing/backgrounding cancels the handoff. Delivery checks the
-originating package, field ID/name, surrounding text and selection. It refuses
-changed destinations. A process restart discards the in-memory translation
-session. No API key or text is logged by the translation code.
+## Setup
 
-API contract: https://developers.deepl.com/api-reference/translate/request-translation
+Create a Gemini API key in Google AI Studio at https://aistudio.google.com/api-keys .
+Open Translate, tap **Gemini key**, paste the key, and save it. The credential
+is encrypted with Android Keystore and kept outside app backups. The old DeepL
+credential is separate and is not re-used.
 
-The panel uses a non-exported translucent activity, following HeliBoard's emoji
-search approach, so normal IME editing, suggestions and paste remain available.
-Device testing should cover returning to messaging apps, rotation, back,
-selection replacement, API failures, and restoring Vietnamese after closing.
+The implementation uses Gemini 2.5 Flash and sends source text to Google's Gemini
+API when typing pauses. Free-tier quotas are controlled by Google and may change.
+Quota errors display a retry-later message; this app does not enable billing.
+
+## Safety
+
+The translator does not automatically send a message. Text is inserted only after
+the explicit **Insert** action, and only if the originating editor, field, text,
+selection and package still match the captured snapshot. It refuses insertion
+if the destination changed. The keyboard's original subtype (including Telex)
+is restored on exit. Network requests and translation results are not logged.
+
+Physical-device validation is required for Zalo navigation, rotation, keyboard
+visibility, API failures, theme appearance, and reliable insertion.
