@@ -64,6 +64,12 @@ jobs:
           path: app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-DeepL-signed.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
+        if: success() && steps.sign.outputs.signed != 'true'
+        with:
+          name: HeliBoard-Gemini-debug-only-${{ github.run_number }}
+          path: app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
+          if-no-files-found: error
+      - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: HeliBoard-focused-tests-${{ github.run_number }}
