@@ -21,6 +21,14 @@ class GeminiClientTest {
         assertFalse(body.toString().contains("API_KEY"))
     }
 
+    @Test fun displaysUsefulErrorsWithoutExposingCredentials() {
+        assertTrue(GeminiFailure(403, "PERMISSION_DENIED").userMessage().contains("403"))
+        assertTrue(GeminiFailure(429, "RESOURCE_EXHAUSTED").userMessage().contains("quota"))
+        assertTrue(GeminiFailure(404, "NOT_FOUND").userMessage().contains("model"))
+        assertTrue(GeminiFailure(400, "FAILED_PRECONDITION").userMessage().contains("region"))
+        assertFalse(GeminiFailure(403, "PERMISSION_DENIED").userMessage().contains("API_KEY"))
+    }
+
     @Test fun reverseDirectionChangesInstructions() {
         val body = JSONObject(GeminiClient.request("Em nhớ anh.", true))
         val system = body.getJSONObject("systemInstruction").getJSONArray("parts")
