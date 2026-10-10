@@ -1,6 +1,10 @@
-name: Translator APK and focused tests
+name: Gemini Translator APK and focused tests
 on:
   push:
+    paths:
+      - 'app/**'
+      - '.github/workflows/translator.yml'
+  pull_request:
     paths:
       - 'app/**'
       - '.github/workflows/translator.yml'
@@ -26,7 +30,7 @@ jobs:
         run: |
           chmod +x gradlew
           VERSION_CODE=$((410100 + GITHUB_RUN_NUMBER))
-          ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
+          ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*GeminiClientTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
       - name: Sign stable APK
         id: sign
         shell: bash
@@ -45,7 +49,7 @@ jobs:
           test -s "$RUNNER_TEMP/heliboard-signing/key.p12"
           test -s "$RUNNER_TEMP/heliboard-signing/password.txt"
           APP=app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
-          SIGNED=app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-DeepL-signed.apk
+          SIGNED=app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
           SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
           "$SIGNER" sign --ks "$RUNNER_TEMP/heliboard-signing/key.p12" --ks-type PKCS12 --ks-key-alias heliboard --ks-pass "file:$RUNNER_TEMP/heliboard-signing/password.txt" --key-pass "file:$RUNNER_TEMP/heliboard-signing/password.txt" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$SIGNED" "$APP"
           "$SIGNER" verify --verbose --print-certs "$SIGNED" > "$RUNNER_TEMP/heliboard-signing/verification.txt"
