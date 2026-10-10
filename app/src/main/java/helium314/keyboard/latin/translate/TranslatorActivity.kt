@@ -188,12 +188,13 @@ class TranslatorActivity : ComponentActivity() {
                 preview.text = it
                 action.isEnabled = true
             }.onFailure {
-                preview.text = when ((it as? TranslationFailure)?.status) {
-                    400 -> "Invalid request"
-                    401, 403 -> "Check your Gemini API key or API access"
-                    429 -> "Free API limit reached. Try again later."
-                    else -> "Translation failed. Check connection and retry."
-                }
+                preview.text = (it as? GeminiFailure)?.userMessage()
+                    ?: "Network error: " + when (it) {
+                        is java.net.UnknownHostException -> "No DNS connection"
+                        is java.net.SocketTimeoutException -> "Connection timed out"
+                        is javax.net.ssl.SSLException -> "Secure connection failed"
+                        else -> "Could not connect to Gemini"
+                    }
             }
         }
     }
