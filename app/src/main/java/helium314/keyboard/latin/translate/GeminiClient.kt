@@ -35,8 +35,8 @@ internal object GeminiClient {
         try {
             connection.requestMethod = "POST"
             connection.instanceFollowRedirects = false
-            connection.connectTimeout = 12000
-            connection.readTimeout = 30000
+            connection.connectTimeout = 8000
+            connection.readTimeout = 15000
             connection.doOutput = true
             connection.setRequestProperty("x-goog-api-key", key)
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
