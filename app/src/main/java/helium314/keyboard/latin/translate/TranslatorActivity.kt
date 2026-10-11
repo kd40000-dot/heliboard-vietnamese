@@ -46,6 +46,18 @@ class TranslatorActivity : ComponentActivity() {
     private var finished = false
     private var lastThemeSignature: Int = 0
     private val debounce = Runnable { translate() }
+    private var timeoutGuard: Runnable? = null
+    private fun clearTimeout() {
+        timeoutGuard?.let { handler.removeCallbacks(it) }
+        timeoutGuard = null
+    }
+    private fun showFailure(message: String) {
+        if (!::preview.isInitialized || !::action.isInitialized) return
+        result = null
+        preview.text = message
+        action.text = "Retry"
+        action.isEnabled = true
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -186,7 +198,11 @@ class TranslatorActivity : ComponentActivity() {
             styleButton(this)
             isEnabled = false
             setOnClickListener {
-                val translated = result ?: return@setOnClickListener
+                val translated = result
+                if (translated == null) {
+                    if (key.isNotBlank() && source.text.isNotBlank()) translate()
+                    return@setOnClickListener
+                }
                 finished = true
                 handler.removeCallbacks(debounce)
                 TranslationSession.complete(token, translated)
@@ -209,8 +225,12 @@ class TranslatorActivity : ComponentActivity() {
         revision++
         handler.removeCallbacks(debounce)
         request?.cancel()
+        clearTimeout()
         result = null
-        if (::action.isInitialized) action.isEnabled = false
+        if (::action.isInitialized) {
+            action.text = "Insert"
+            action.isEnabled = false
+        }
         if (!::source.isInitialized || !::preview.isInitialized) return
         if (key.isBlank()) {
             preview.text = "Set your free Gemini API key to begin"
@@ -223,28 +243,58 @@ class TranslatorActivity : ComponentActivity() {
     }
 
     private fun translate() {
+        if (!::source.isInitialized || !::preview.isInitialized) return
         val input = source.text.toString()
-        if (key.isBlank() || input.isBlank()) return
-        val sequence = revision
-        val direction = reverse
+        if (key.isBlank()) { showFailure("Enter your Gemini API key first."); return }
+        if (input.isBlank()) { showFailure("Type a message before translating."); return }
+
+        handler.removeCallbacks(debounce)
+        clearTimeout()
+        request?.cancel()
+        val sequence = ++revision
+        val directionValue = reverse
         val credential = key
+        result = null
+        preview.text = "Translating…"
+        action.text = "Insert"
+        action.isEnabled = false
+
+        // Android may cancel a coroutine while an HTTP request is suspended, without ever
+        // resuming the success/error UI. This main-thread watchdog always exits loading.
+        val guard = Runnable {
+            if (sequence == revision && !finished && TranslationSession.valid(token)) {
+                revision++
+                request?.cancel()
+                showFailure("Gemini timed out after 25 seconds. Tap Retry.")
+            }
+        }
+        timeoutGuard = guard
+        handler.postDelayed(guard, 25_000L)
+
         request = lifecycleScope.launch {
-            val answer = withContext(Dispatchers.IO) {
-                runCatching { GeminiClient.translate(credential, input, direction) }
+            val answer = try {
+                withContext(Dispatchers.IO) {
+                    runCatching { GeminiClient.translate(credential, input, directionValue) }
+                }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                // Invalidation or Activity shutdown; the watchdog handles unexpected stalls.
+                return@launch
             }
             if (sequence != revision || !TranslationSession.valid(token) || finished) return@launch
+            clearTimeout()
             answer.onSuccess {
                 result = it
                 preview.text = it
+                action.text = "Insert"
                 action.isEnabled = true
             }.onFailure {
-                preview.text = (it as? GeminiFailure)?.userMessage()
+                showFailure((it as? GeminiFailure)?.userMessage()
                     ?: "Network error: " + when (it) {
                         is java.net.UnknownHostException -> "No DNS connection"
                         is java.net.SocketTimeoutException -> "Connection timed out"
                         is javax.net.ssl.SSLException -> "Secure connection failed"
                         else -> "Could not connect to Gemini"
-                    }
+                    })
             }
         }
     }
@@ -252,6 +302,8 @@ class TranslatorActivity : ComponentActivity() {
     private fun cancel() {
         finished = true
         handler.removeCallbacks(debounce)
+        clearTimeout()
+        request?.cancel()
         TranslationSession.complete(token, null)
         finish()
     }
@@ -261,6 +313,7 @@ class TranslatorActivity : ComponentActivity() {
     }
     override fun onDestroy() {
         handler.removeCallbacks(debounce)
+        clearTimeout()
         request?.cancel()
         super.onDestroy()
     }
