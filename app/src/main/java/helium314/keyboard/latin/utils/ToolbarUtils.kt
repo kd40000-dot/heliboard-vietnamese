@@ -2,6 +2,9 @@
 package helium314.keyboard.latin.utils
 
 import android.content.Context
+import android.content.res.ColorStateList
+import androidx.core.widget.ImageViewCompat
+import helium314.keyboard.latin.common.ColorType
 import android.content.SharedPreferences
 import android.view.View
 import android.view.ViewConfiguration
@@ -32,6 +35,13 @@ fun createToolbarKey(context: Context, key: ToolbarKey): ImageButton {
     button.contentDescription = key.name.lowercase().getStringResourceOrName("", context)
     setToolbarButtonActivatedState(button)
     button.setImageDrawable(KeyboardIconsSet.instance.getNewDrawable(key.name, context))
+    if (key == TRANSLATE) {
+        // Unlike some toolbar glyphs, ic_translate is an ordinary vector and
+        // otherwise retains its original black fill on dark themes.
+        ImageViewCompat.setImageTintList(
+            button, ColorStateList.valueOf(Settings.getValues().mColors.get(ColorType.TOOL_BAR_KEY))
+        )
+    }
     return button
 }
 
