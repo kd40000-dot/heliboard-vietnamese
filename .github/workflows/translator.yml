@@ -32,6 +32,7 @@ jobs:
           VERSION_CODE=$((410100 + GITHUB_RUN_NUMBER))
           ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*GeminiClientTest' --tests '*BackupDefaultsTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
       - name: Sign stable APK
+        if: github.event_name != 'pull_request'
         id: sign
         shell: bash
         env:
@@ -39,8 +40,8 @@ jobs:
         run: |
           set -euo pipefail
           if [[ -z "$SIGNING_BUNDLE" ]]; then
-            echo "::warning::Add HELIBOARD_SIGNING_BUNDLE_B64 under repository Actions secrets to enable permanent APK signing."
-            exit 0
+            echo "::error::Permanent signing unavailable: set repository Actions secret HELIBOARD_SIGNING_BUNDLE_B64. No distributable APK will be published."
+            exit 1
           fi
           umask 077
           install -d "$RUNNER_TEMP/heliboard-signing" app/build/outputs/permanentlySigned
@@ -58,16 +59,10 @@ jobs:
           test "${FINGERPRINT,,}" = "$EXPECTED" || { echo "::error::Signing certificate fingerprint mismatch"; exit 1; }
           echo 'signed=true' >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
-        if: success() && steps.sign.outputs.signed == 'true'
+        if: success() && github.event_name != 'pull_request' && steps.sign.outputs.signed == 'true'
         with:
           name: HeliBoard-signed-${{ github.run_number }}
-          path: app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-DeepL-signed.apk
-          if-no-files-found: error
-      - uses: actions/upload-artifact@v4
-        if: success() && steps.sign.outputs.signed != 'true'
-        with:
-          name: HeliBoard-Gemini-debug-only-${{ github.run_number }}
-          path: app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
+          path: app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
