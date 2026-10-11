@@ -251,6 +251,19 @@ public final class Settings implements SharedPreferences.OnSharedPreferenceChang
     private void onCreate(final Context context) {
         mContext = context;
         mPrefs = KtxKt.prefs(context);
+        // Seed the custom Dracula palette from the user's chosen theme only when absent.
+        // Never replace a restored palette or change existing user preferences.
+        final String draculaKey = PREF_USER_COLORS_PREFIX + "Dracula";
+        if (!mPrefs.contains(draculaKey)) {
+            mPrefs.edit().putString(draculaKey,
+                    "[{\"name\":\"spacebar\",\"auto\":false,\"color\":-12302502}," +
+                    "{\"name\":\"text\",\"auto\":false,\"color\":-460558}," +
+                    "{\"name\":\"accent\",\"auto\":false,\"color\":-4353031}," +
+                    "{\"name\":\"hint_text\",\"auto\":false,\"color\":-34362}," +
+                    "{\"name\":\"background\",\"auto\":false,\"color\":-14144970}," +
+                    "{\"name\":\"keys\",\"auto\":false,\"color\":-12302502}]")
+                    .apply();
+        }
         mPrefs.registerOnSharedPreferenceChangeListener(this);
     }
 
