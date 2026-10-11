@@ -56,7 +56,6 @@ class TranslatorActivity : ComponentActivity() {
         val inputBackground = colors.get(ColorType.SPACE_BAR_BACKGROUND)
         val controlBackground = colors.get(ColorType.FUNCTIONAL_KEY_BACKGROUND)
         val accent = colors.get(ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND)
-        val hint = colors.get(ColorType.KEY_HINT_TEXT)
         lastThemeSignature = foreground xor background xor accent
         val buttonText = foreground
         fun styleButton(button: Button) {
@@ -100,12 +99,12 @@ class TranslatorActivity : ComponentActivity() {
         panel.addView(header)
 
         source = EditText(this).apply {
-            hint = "Type English…"
+            this.hint = "Type English…"
             setTextColor(foreground)
             setHintTextColor(ColorUtils.setAlphaComponent(foreground, 180))
             setHighlightColor(ColorUtils.setAlphaComponent(accent, 110))
             typeface = Typeface.DEFAULT
-            background = GradientDrawable().apply {
+            this.background = GradientDrawable().apply {
                 setColor(inputBackground)
                 cornerRadius = dp(6).toFloat()
             }
@@ -144,7 +143,7 @@ class TranslatorActivity : ComponentActivity() {
             styleButton(this)
             setOnClickListener {
                 val entry = EditText(this@TranslatorActivity).apply {
-                    hint = "Google AI Studio API key"
+                    this.hint = "Google AI Studio API key"
                     inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                     setSingleLine(true)
                     setTextColor(foreground)
