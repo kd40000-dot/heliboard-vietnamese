@@ -2,6 +2,12 @@
 package helium314.keyboard.latin.translate
 
 import android.os.Bundle
+import android.content.res.ColorStateList
+import android.graphics.Typeface
+import android.graphics.drawable.GradientDrawable
+import android.graphics.Color
+import android.content.res.Configuration
+import androidx.core.graphics.ColorUtils
 import android.os.Handler
 import android.os.Looper
 import android.text.InputFilter
@@ -38,6 +44,7 @@ class TranslatorActivity : ComponentActivity() {
     private var key = ""
     private var reverse = false
     private var finished = false
+    private var lastThemeSignature: Int = 0
     private val debounce = Runnable { translate() }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,7 +53,19 @@ class TranslatorActivity : ComponentActivity() {
         val colors = Settings.getValues().mColors
         val foreground = colors.get(ColorType.KEY_TEXT)
         val background = colors.get(ColorType.MAIN_BACKGROUND)
-        val root = FrameLayout(this)
+        val inputBackground = colors.get(ColorType.SPACE_BAR_BACKGROUND)
+        val controlBackground = colors.get(ColorType.FUNCTIONAL_KEY_BACKGROUND)
+        val accent = colors.get(ColorType.TOOL_BAR_KEY_ENABLED_BACKGROUND)
+        val hint = colors.get(ColorType.KEY_HINT_TEXT)
+        lastThemeSignature = foreground xor background xor accent
+        val buttonText = foreground
+        fun styleButton(button: Button) {
+            button.typeface = Typeface.DEFAULT
+            button.setTextColor(buttonText)
+            button.backgroundTintList = ColorStateList.valueOf(controlBackground)
+            button.isAllCaps = false
+        }
+        val root = FrameLayout(this).apply { setBackgroundColor(Color.TRANSPARENT) }
         val panel = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             setPadding(dp(12), dp(8), dp(12), dp(8))
@@ -64,6 +83,7 @@ class TranslatorActivity : ComponentActivity() {
         val header = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         direction = Button(this).apply {
             text = "English → Vietnamese"
+            styleButton(this)
             setOnClickListener {
                 reverse = !reverse
                 text = if (reverse) "Vietnamese → English" else "English → Vietnamese"
@@ -74,6 +94,7 @@ class TranslatorActivity : ComponentActivity() {
         header.addView(direction, LinearLayout.LayoutParams(0, -2, 1f))
         header.addView(Button(this).apply {
             text = "×"
+            styleButton(this)
             setOnClickListener { cancel() }
         })
         panel.addView(header)
@@ -81,6 +102,20 @@ class TranslatorActivity : ComponentActivity() {
         source = EditText(this).apply {
             hint = "Type English…"
             setTextColor(foreground)
+            setHintTextColor(ColorUtils.setAlphaComponent(foreground, 180))
+            setHighlightColor(ColorUtils.setAlphaComponent(accent, 110))
+            typeface = Typeface.DEFAULT
+            background = GradientDrawable().apply {
+                setColor(inputBackground)
+                cornerRadius = dp(6).toFloat()
+            }
+            setPadding(dp(10), dp(8), dp(10), dp(8))
+            if (android.os.Build.VERSION.SDK_INT >= 29) {
+                textCursorDrawable = GradientDrawable().apply {
+                    setColor(accent)
+                    setSize(dp(2), dp(24))
+                }
+            }
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_MULTI_LINE or
                 InputType.TYPE_TEXT_FLAG_CAP_SENTENCES
             imeOptions = EditorInfo.IME_FLAG_NO_EXTRACT_UI or EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING
@@ -96,6 +131,7 @@ class TranslatorActivity : ComponentActivity() {
             text = "Translation appears here"
             textSize = 15f
             setTextColor(foreground)
+            typeface = Typeface.DEFAULT
             setPadding(dp(8), dp(8), dp(8), dp(8))
             minHeight = dp(48)
         }
@@ -105,16 +141,21 @@ class TranslatorActivity : ComponentActivity() {
         key = store.read()
         actions.addView(Button(this).apply {
             text = "Gemini key"
+            styleButton(this)
             setOnClickListener {
                 val entry = EditText(this@TranslatorActivity).apply {
                     hint = "Google AI Studio API key"
                     inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_PASSWORD
                     setSingleLine(true)
+                    setTextColor(foreground)
+                    setHintTextColor(ColorUtils.setAlphaComponent(foreground, 180))
+                    backgroundTintList = ColorStateList.valueOf(accent)
+                    typeface = Typeface.DEFAULT
                     setText(key)
                     isSaveEnabled = false
                     privateImeOptions = TranslationSession.EDITOR
                 }
-                android.app.AlertDialog.Builder(this@TranslatorActivity)
+                val dialog = android.app.AlertDialog.Builder(this@TranslatorActivity)
                     .setTitle("Gemini API key")
                     .setMessage("Create a free-tier key at aistudio.google.com/api-keys. Text is sent to Google only for translation.")
                     .setView(entry)
@@ -129,11 +170,21 @@ class TranslatorActivity : ComponentActivity() {
                                 invalidateTranslation()
                             }.onFailure { preview.text = "Could not securely store key" }
                         }
-                    }.show()
+                    }.create()
+                dialog.setOnShowListener {
+                    dialog.window?.setBackgroundDrawable(GradientDrawable().apply {
+                        setColor(background)
+                        cornerRadius = dp(12).toFloat()
+                    })
+                    dialog.getButton(android.app.AlertDialog.BUTTON_POSITIVE)?.apply { setTextColor(accent) }
+                    dialog.getButton(android.app.AlertDialog.BUTTON_NEGATIVE)?.apply { setTextColor(accent) }
+                }
+                dialog.show()
             }
         })
         action = Button(this).apply {
             text = "Insert"
+            styleButton(this)
             isEnabled = false
             setOnClickListener {
                 val translated = result ?: return@setOnClickListener
