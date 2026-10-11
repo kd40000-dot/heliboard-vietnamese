@@ -71,3 +71,26 @@ builds signed with this key can update without wiping settings.
 
 For future ChatGPT deliverables: download the GitHub workflow artifact, extract
 the APK, and share the APK directly rather than making the user extract a ZIP.
+
+## Update signing policy (2026-10-11)
+
+The translator workflow **never distributes debug-signed APKs**. Pull requests compile
+and run tests without APK distribution. Branch pushes and manual release workflow
+runs require the repository Actions secret `HELIBOARD_SIGNING_BUNDLE_B64`; if it
+is absent, the release job fails explicitly rather than publishing an incompatible
+APK. Only signed artifacts with the pinned certificate SHA-256
+`07DF108DE8865D1B7C4F70D4674A8E5AEC114C5BAC1F907616981638556E85E9`
+are released. Version codes increase with workflow run number.
+
+To activate: find your privately held `HeliBoard-PERMANENT-SIGNING-KEY-BACKUP.zip`,
+open `github-actions-secret.txt` locally, and place its one-line value in
+GitHub Settings > Secrets and variables > Actions > New repository secret under
+`HELIBOARD_SIGNING_BUNDLE_B64`. Never commit the ZIP or paste the value into a
+public conversation. Then re-run the workflow and verify the signed artifact.
+
+Android cannot install an APK with a different signing certificate over the
+current one. If your last debug build had a different certificate, export
+HeliBoard settings, uninstall that copy, install the first permanently-signed
+APK, and restore settings. This final one-time migration may not retain the
+non-exported Gemini API credential; re-enter it if needed. All subsequent
+permanently-signed builds can install over one another without uninstalling.
