@@ -30,7 +30,7 @@ jobs:
         run: |
           chmod +x gradlew
           VERSION_CODE=$((410100 + GITHUB_RUN_NUMBER))
-          ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*GeminiClientTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
+          ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*GeminiClientTest' --tests '*BackupDefaultsTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
       - name: Sign stable APK
         id: sign
         shell: bash
