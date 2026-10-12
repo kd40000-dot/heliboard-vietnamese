@@ -5,6 +5,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
+import java.io.IOException
 
 /** Network requests only after the user pauses typing. Never logs text or credentials. */
 internal object GeminiClient {
@@ -30,8 +31,9 @@ internal object GeminiClient {
         return supported.distinct().sortedDescending()
     }
 
-    private fun listFlashLiteModels(key: String): List<String> {
+    private fun listFlashLiteModels(key: String, cancellation: TranslationCancellation?): List<String> {
         val connection = URL("$MODELS_ENDPOINT?pageSize=1000").openConnection() as HttpURLConnection
+        cancellation?.register(connection)
         try {
             connection.requestMethod = "GET"
             connection.instanceFollowRedirects = false
@@ -44,6 +46,7 @@ internal object GeminiClient {
                 connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
             )
         } finally {
+            cancellation?.unregister(connection)
             connection.disconnect()
         }
     }
@@ -75,29 +78,49 @@ internal object GeminiClient {
             .toString()
     }
 
+    /** Each SSE line contains an incremental (not cumulative) text chunk. */
+    internal fun parseStreamText(line: String): String {
+        if (!line.startsWith("data:")) return ""
+        return runCatching {
+            val candidate = JSONObject(line.substringAfter("data:").trim())
+                .optJSONArray("candidates")?.optJSONObject(0) ?: return@runCatching ""
+            val parts = candidate.optJSONObject("content")?.optJSONArray("parts")
+                ?: return@runCatching ""
+            buildString {
+                for (i in 0 until parts.length()) {
+                    val part = parts.optJSONObject(i) ?: continue
+                    // Do not show thought tokens or expose any model-internal output.
+                    if (!part.optBoolean("thought", false)) append(part.optString("text"))
+                }
+            }
+        }.getOrDefault("")
+    }
+
     fun translate(
-        key: String, text: String, reverse: Boolean, cache: TranslationModelCache? = null
+        key: String, text: String, reverse: Boolean, cache: TranslationModelCache? = null,
+        cancellation: TranslationCancellation? = null, onPartial: ((String) -> Unit)? = null
     ): String {
         val cachedModel = cache?.read(key)
         val firstModel = cachedModel ?: DEFAULT_MODEL
         try {
-            val translated = translateWithModel(key, text, reverse, firstModel)
+            val translated = translateWithModel(key, text, reverse, firstModel, cancellation, onPartial)
             cache?.save(key, firstModel)
             return translated
         } catch (missing: GeminiFailure) {
             if (missing.httpStatus != 404) throw missing
-            // Only discover on a 404, not for every ordinary translation.
             cache?.invalidate(key)
         }
 
-        val available = listFlashLiteModels(key)
-        // A stale cached model should not prevent trying the newest default.
+        // A 404 is a model error. Network timeouts are NOT retried automatically:
+        // repeating a POST may consume the user's limited free request quota.
+        val available = listFlashLiteModels(key, cancellation)
         val candidates = (listOf(DEFAULT_MODEL) + available).distinct()
             .filterNot { it == firstModel }
         for (model in candidates) {
             if (!isValidFlashLiteModel(model)) continue
+            cancellation?.check()
             try {
-                val translated = translateWithModel(key, text, reverse, model)
+                val translated = translateWithModel(key, text, reverse, model, cancellation, onPartial)
                 cache?.save(key, model)
                 return translated
             } catch (missing: GeminiFailure) {
@@ -107,36 +130,58 @@ internal object GeminiClient {
         throw GeminiFailure(404, "NO_FLASH_LITE_MODEL")
     }
 
-    private fun translateWithModel(key: String, text: String, reverse: Boolean, model: String): String {
-        val connection = URL("$MODELS_ENDPOINT/$model:generateContent").openConnection() as HttpURLConnection
+    private fun translateWithModel(
+        key: String, text: String, reverse: Boolean, model: String,
+        cancellation: TranslationCancellation?, onPartial: ((String) -> Unit)?
+    ): String {
+        val connection = URL("$MODELS_ENDPOINT/$model:streamGenerateContent?alt=sse")
+            .openConnection() as HttpURLConnection
+        cancellation?.register(connection)
         try {
             connection.requestMethod = "POST"
             connection.instanceFollowRedirects = false
-            connection.connectTimeout = 8000
-            connection.readTimeout = 15000
+            connection.connectTimeout = 12000
+            // A read timeout measures network inactivity, not the total response time.
+            // The UI has a separate end-to-end watchdog.
+            connection.readTimeout = 45000
             connection.doOutput = true
             connection.setRequestProperty("x-goog-api-key", key)
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.outputStream.use { it.write(request(text, reverse, model).toByteArray(Charsets.UTF_8)) }
+            connection.setRequestProperty("Accept", "text/event-stream")
+            connection.setRequestProperty("Accept-Encoding", "identity")
+            val payload = request(text, reverse, model).toByteArray(Charsets.UTF_8)
+            connection.setFixedLengthStreamingMode(payload.size)
+            cancellation?.check()
+            connection.outputStream.use { it.write(payload) }
+            cancellation?.check()
             val status = connection.responseCode
             if (status != 200) {
-                // Google error bodies may include project metadata. Expose only the status and a
-                // small, explicit allow-list of useful error categories, never the raw body.
                 val errorBody = connection.errorStream?.bufferedReader(Charsets.UTF_8)
                     ?.use { it.readText().take(8192) }.orEmpty()
-                val code = runCatching { JSONObject(errorBody).getJSONObject("error")
-                    .optString("status") }.getOrDefault("")
+                val code = runCatching {
+                    JSONObject(errorBody).getJSONObject("error").optString("status")
+                }.getOrDefault("")
                 throw GeminiFailure(status, code)
             }
-            val response = JSONObject(connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-            val parts = response.getJSONArray("candidates").getJSONObject(0)
-                .getJSONObject("content").getJSONArray("parts")
-            val translation = (0 until parts.length()).joinToString("") {
-                parts.getJSONObject(it).optString("text")
-            }.trim()
-            if (translation.isBlank()) throw GeminiFailure(200, "EMPTY_RESPONSE")
-            return translation
+            val translated = StringBuilder()
+            connection.inputStream.bufferedReader(Charsets.UTF_8).use { reader ->
+                while (true) {
+                    cancellation?.check()
+                    val line = reader.readLine() ?: break
+                    val chunk = parseStreamText(line)
+                    if (chunk.isNotEmpty()) {
+                        translated.append(chunk)
+                        if (translated.length > 20000) throw IOException("Translation too long")
+                        onPartial?.invoke(translated.toString())
+                    }
+                }
+            }
+            cancellation?.check()
+            val result = translated.toString().trim()
+            if (result.isBlank()) throw GeminiFailure(200, "EMPTY_RESPONSE")
+            return result
         } finally {
+            cancellation?.unregister(connection)
             connection.disconnect()
         }
     }
@@ -155,5 +200,33 @@ internal class GeminiFailure(val httpStatus: Int, val apiStatus: String) : Excep
         httpStatus in 500..599 -> "Gemini HTTP $httpStatus: Google server temporarily unavailable."
         httpStatus == 200 -> "Gemini returned no translation. Try different text."
         else -> "Gemini HTTP $httpStatus: Request failed ($apiStatus)."
+    }
+}
+
+/** Disconnects a stale in-flight request when typing resumes or the UI closes. */
+internal class TranslationCancellation {
+    @Volatile private var cancelled = false
+    private var connection: HttpURLConnection? = null
+
+    @Synchronized fun register(active: HttpURLConnection) {
+        if (cancelled) {
+            active.disconnect()
+            throw IOException("Request cancelled")
+        }
+        connection = active
+    }
+
+    @Synchronized fun unregister(active: HttpURLConnection) {
+        if (connection === active) connection = null
+    }
+
+    @Synchronized fun cancel() {
+        cancelled = true
+        connection?.disconnect()
+        connection = null
+    }
+
+    fun check() {
+        if (cancelled) throw IOException("Request cancelled")
     }
 }
