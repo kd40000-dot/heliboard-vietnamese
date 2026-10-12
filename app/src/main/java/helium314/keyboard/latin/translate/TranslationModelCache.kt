@@ -22,8 +22,8 @@ internal class TranslationModelCache(context: Context) {
 
     @Synchronized fun read(apiKey: String): String? = runCatching {
         val lines = file.readLines(Charsets.UTF_8)
-        if (lines.size != 2 || lines[0] != fingerprint(apiKey)) return null
-        lines[1].takeIf { GeminiClient.isValidFlashLiteModel(it) }
+        if (lines.size != 2 || lines[0] != fingerprint(apiKey)) null
+        else lines[1].takeIf { GeminiClient.isValidFlashLiteModel(it) }
     }.getOrNull()
 
     @Synchronized fun save(apiKey: String, model: String) {
