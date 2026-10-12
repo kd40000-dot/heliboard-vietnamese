@@ -64,6 +64,13 @@ jobs:
           name: HeliBoard-signed-${{ github.run_number }}
           path: app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
           if-no-files-found: error
+      - name: Upload test-only APK for pull request validation
+        if: success() && github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v4
+        with:
+          name: HeliBoard-Gemini-TEST-ONLY-${{ github.run_number }}
+          path: app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
+          if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
         with:
