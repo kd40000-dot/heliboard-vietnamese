@@ -42,6 +42,7 @@ class TranslatorActivity : ComponentActivity() {
     private lateinit var direction: Button
     private var result: String? = null
     private var key = ""
+    private lateinit var modelCache: TranslationModelCache
     private var reverse = false
     private var finished = false
     private var lastThemeSignature: Int = 0
@@ -149,6 +150,7 @@ class TranslatorActivity : ComponentActivity() {
         panel.addView(preview)
         val actions = LinearLayout(this).apply { gravity = Gravity.CENTER_VERTICAL }
         val store = TranslationKeyStore(this)
+        modelCache = TranslationModelCache(applicationContext)
         key = store.read()
         actions.addView(Button(this).apply {
             text = "Gemini key"
@@ -228,8 +230,10 @@ class TranslatorActivity : ComponentActivity() {
         clearTimeout()
         result = null
         if (::action.isInitialized) {
-            action.text = "Insert"
-            action.isEnabled = false
+            // Typing pauses trigger an automatic request, but users can skip the pause
+            // by pressing Translate now (also useful for one-word messages).
+            action.text = "Translate now"
+            action.isEnabled = key.isNotBlank() && ::source.isInitialized && source.text.isNotBlank()
         }
         if (!::source.isInitialized || !::preview.isInitialized) return
         if (key.isBlank()) {
@@ -238,7 +242,7 @@ class TranslatorActivity : ComponentActivity() {
             preview.text = "Translation appears here"
         } else {
             preview.text = "Translating…"
-            handler.postDelayed(debounce, 1000L)
+            handler.postDelayed(debounce, 450L)
         }
     }
 
@@ -274,7 +278,7 @@ class TranslatorActivity : ComponentActivity() {
         request = lifecycleScope.launch {
             val answer = try {
                 withContext(Dispatchers.IO) {
-                    runCatching { GeminiClient.translate(credential, input, directionValue) }
+                    runCatching { GeminiClient.translate(credential, input, directionValue, modelCache) }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Invalidation or Activity shutdown; the watchdog handles unexpected stalls.
