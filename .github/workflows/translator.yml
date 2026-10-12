@@ -10,7 +10,7 @@ on:
       - '.github/workflows/translator.yml'
   workflow_dispatch:
 permissions:
-  contents: read
+  contents: write
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,45 +31,77 @@ jobs:
           chmod +x gradlew
           VERSION_CODE=$((410100 + GITHUB_RUN_NUMBER))
           ./gradlew :app:assembleDebugNoMinify :app:testDebugUnitTest --tests '*DeepLClientTest' --tests '*GeminiClientTest' --tests '*BackupDefaultsTest' --tests '*VietnameseTelexTest' --tests '*TelexChainTest' --tests '*InputLogicTest*telex*' --no-daemon --max-workers=2 -Pkotlin.incremental=false -PheliboardVersionCode="$VERSION_CODE" -Dorg.gradle.jvmargs=-Xmx3g -Dkotlin.compiler.execution.strategy=in-process
-      - name: Sign stable APK
+      - name: Sign stable APK with repository-pinned key
         if: github.event_name != 'pull_request'
         id: sign
         shell: bash
-        env:
-          SIGNING_BUNDLE: ${{ secrets.HELIBOARD_SIGNING_BUNDLE_B64 }}
         run: |
           set -euo pipefail
-          if [[ -z "$SIGNING_BUNDLE" ]]; then
-            echo "::error::Permanent signing unavailable: set repository Actions secret HELIBOARD_SIGNING_BUNDLE_B64. No distributable APK will be published."
-            exit 1
-          fi
           umask 077
-          install -d "$RUNNER_TEMP/heliboard-signing" app/build/outputs/permanentlySigned
-          printf '%s' "$SIGNING_BUNDLE" | base64 -d > "$RUNNER_TEMP/heliboard-signing/keys.zip"
-          unzip -q "$RUNNER_TEMP/heliboard-signing/keys.zip" -d "$RUNNER_TEMP/heliboard-signing"
-          test -s "$RUNNER_TEMP/heliboard-signing/key.p12"
-          test -s "$RUNNER_TEMP/heliboard-signing/password.txt"
+          SIGNING_DIR=.github/signing
+          PRIVATE_B64="$SIGNING_DIR/heliboard-release.p12.b64"
+          PASSWORD_FILE="$SIGNING_DIR/keystore-password.txt"
+          PIN_FILE="$SIGNING_DIR/certificate-sha256.txt"
+          TMP="$RUNNER_TEMP/heliboard-signing"
+          mkdir -p "$TMP" "$SIGNING_DIR" app/build/outputs/permanentlySigned
+          KEYSTORE="$TMP/heliboard-release.p12"
+          if [[ ! -f "$PRIVATE_B64" ]]; then
+            # Bootstrap ONCE from a fresh key. Commit to this branch so that
+            # all future CI runs reuse the identical signing certificate.
+            if [[ -e "$PASSWORD_FILE" || -e "$PIN_FILE" ]]; then
+              echo "::error::Incomplete signing assets; refusing to rotate the certificate."
+              exit 1
+            fi
+            echo "::warning::A public repository signing key is being created as explicitly requested. Anyone with these files can sign an APK."
+            openssl rand -hex 32 > "$PASSWORD_FILE"
+            PASS="$(cat "$PASSWORD_FILE")"
+            keytool -genkeypair -alias heliboard -keyalg RSA -keysize 3072 \
+              -validity 36500 -storetype PKCS12 -keystore "$KEYSTORE" \
+              -storepass "$PASS" -keypass "$PASS" \
+              -dname "CN=HeliBoard Vietnamese Gemini, OU=Android Keyboard, O=Custom HeliBoard, C=ES" -noprompt
+            base64 -w0 "$KEYSTORE" > "$PRIVATE_B64"
+            keytool -list -v -alias heliboard -keystore "$KEYSTORE" -storetype PKCS12 \
+              -storepass "$PASS" 2>/dev/null \
+              | sed -nE 's/^[[:space:]]*SHA256:[[:space:]]*//p' \
+              | tr -d ':' | tr '[:upper:]' '[:lower:]' > "$PIN_FILE"
+            test "$(wc -c < "$PIN_FILE")" -eq 65 || {
+              echo "::error::Could not read newly generated certificate fingerprint"
+              exit 1
+            }
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add "$PRIVATE_B64" "$PASSWORD_FILE" "$PIN_FILE"
+            git commit -m "Bootstrap reusable HeliBoard signing certificate"
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          else
+            test -s "$PASSWORD_FILE" && test -s "$PIN_FILE" || {
+              echo "::error::Signing key incomplete; refusing key rotation"
+              exit 1
+            }
+            base64 -d "$PRIVATE_B64" > "$KEYSTORE"
+          fi
+          PASS="$(cat "$PASSWORD_FILE")"
+          test -s "$KEYSTORE"
           APP=app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
           SIGNED=app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
           SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
-          "$SIGNER" sign --ks "$RUNNER_TEMP/heliboard-signing/key.p12" --ks-type PKCS12 --ks-key-alias heliboard --ks-pass "file:$RUNNER_TEMP/heliboard-signing/password.txt" --key-pass "file:$RUNNER_TEMP/heliboard-signing/password.txt" --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true --out "$SIGNED" "$APP"
-          "$SIGNER" verify --verbose --print-certs "$SIGNED" > "$RUNNER_TEMP/heliboard-signing/verification.txt"
-          FINGERPRINT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$RUNNER_TEMP/heliboard-signing/verification.txt" | head -1)
-          EXPECTED=07df108de8865d1b7c4f70d4674a8e5aec114c5bac1f907616981638556e85e9
-          test "${FINGERPRINT,,}" = "$EXPECTED" || { echo "::error::Signing certificate fingerprint mismatch"; exit 1; }
-          echo 'signed=true' >> "$GITHUB_OUTPUT"
+          "$SIGNER" sign --ks "$KEYSTORE" --ks-type PKCS12 --ks-key-alias heliboard \
+            --ks-pass "file:$PASSWORD_FILE" --key-pass "file:$PASSWORD_FILE" \
+            --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
+            --out "$SIGNED" "$APP"
+          "$SIGNER" verify --verbose --print-certs "$SIGNED" > "$TMP/signature.txt"
+          FINGERPRINT=$(sed -n 's/^Signer #1 certificate SHA-256 digest: //p' "$TMP/signature.txt" | head -1)
+          EXPECTED=$(tr -d '[:space:]' < "$PIN_FILE")
+          [[ -n "$EXPECTED" && "${FINGERPRINT,,}" = "$EXPECTED" ]] || {
+            echo "::error::Signing certificate mismatch; refusing release"
+            exit 1
+          }
+          echo "signed=true" >> "$GITHUB_OUTPUT"
       - uses: actions/upload-artifact@v4
         if: success() && github.event_name != 'pull_request' && steps.sign.outputs.signed == 'true'
         with:
           name: HeliBoard-signed-${{ github.run_number }}
           path: app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
-          if-no-files-found: error
-      - name: Upload test-only APK for pull request validation
-        if: success() && github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: HeliBoard-Gemini-TEST-ONLY-${{ github.run_number }}
-          path: app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
           if-no-files-found: error
       - uses: actions/upload-artifact@v4
         if: always()
