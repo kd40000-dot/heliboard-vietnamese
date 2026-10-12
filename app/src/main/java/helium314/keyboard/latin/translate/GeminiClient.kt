@@ -11,6 +11,10 @@ internal object GeminiClient {
     private const val MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
     internal const val DEFAULT_MODEL = "gemini-3.1-flash-lite"
 
+    /** Stable text-only low-latency models; avoid Pro, preview, image and experimental models. */
+    internal fun isValidFlashLiteModel(name: String): Boolean =
+        name.matches(Regex("gemini-[0-9]+(?:\\.[0-9]+)?-flash-lite"))
+
     /** Only consider text-capable Flash-Lite models, never paid-tier Pro or preview variants. */
     internal fun parseAvailableFlashLiteModels(json: String): List<String> {
         val models = JSONObject(json).optJSONArray("models") ?: return emptyList()
@@ -18,8 +22,7 @@ internal object GeminiClient {
         for (i in 0 until models.length()) {
             val item = models.optJSONObject(i) ?: continue
             val name = item.optString("name").removePrefix("models/")
-            if (!name.startsWith("gemini-") || !name.contains("flash-lite") ||
-                name.contains("preview") || name.contains("image") || name.contains("exp")) continue
+            if (!isValidFlashLiteModel(name)) continue
             val methods = item.optJSONArray("supportedGenerationMethods") ?: continue
             if ((0 until methods.length()).none { methods.optString(it) == "generateContent" }) continue
             supported.add(name)
@@ -45,41 +48,63 @@ internal object GeminiClient {
         }
     }
 
-    fun request(text: String, reverse: Boolean): String {
+    fun request(text: String, reverse: Boolean, model: String = DEFAULT_MODEL): String {
         val instruction = if (reverse) {
-            "Translate Vietnamese into natural English. The Vietnamese message is from em to anh. " +
-                "Preserve meaning, affection and ambiguity. Output only the English translation."
+            "Translate this Vietnamese message from em to anh into natural English. " +
+                "Preserve meaning, affection, punctuation and line breaks. Output only the translation."
         } else {
-            "Translate this English message into natural, informal Vietnamese from a man (anh) " +
-                "addressing a younger woman named Tran (em). Always use anh for the speaker " +
-                "and em for the addressee where pronouns are needed. Avoid formal tôi/bạn, " +
-                "do not invent affection not present in the source. Preserve punctuation, " +
-                "meaning and line breaks. Output only the Vietnamese translation."
+            "Translate into natural, informal Vietnamese: the male speaker is anh and " +
+                "the recipient Tran is em. Use anh/em where needed, not tôi/bạn. " +
+                "Preserve meaning, tone, punctuation and line breaks without added affection. " +
+                "Output only the translation."
+        }
+        val tokenLimit = (text.length * 2 + 96).coerceIn(160, 2048)
+        val config = JSONObject()
+            .put("temperature", 0.1)
+            .put("maxOutputTokens", tokenLimit)
+        // Gemini 3 Flash-Lite accepts minimal thinking; Gemini 2.5 Flash-Lite
+        // does not accept thinkingLevel (and defaults to zero thinking tokens).
+        if (!model.startsWith("gemini-2.5-")) {
+            config.put("thinkingConfig", JSONObject().put("thinkingLevel", "minimal"))
         }
         return JSONObject()
             .put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", instruction))))
             .put("contents", JSONArray().put(JSONObject().put("role", "user")
                 .put("parts", JSONArray().put(JSONObject().put("text", text)))))
-            .put("generationConfig", JSONObject().put("temperature", 0.2).put("maxOutputTokens", 2048))
+            .put("generationConfig", config)
             .toString()
     }
 
-    fun translate(key: String, text: String, reverse: Boolean): String {
+    fun translate(
+        key: String, text: String, reverse: Boolean, cache: TranslationModelCache? = null
+    ): String {
+        val cachedModel = cache?.read(key)
+        val firstModel = cachedModel ?: DEFAULT_MODEL
         try {
-            return translateWithModel(key, text, reverse, DEFAULT_MODEL)
+            val translated = translateWithModel(key, text, reverse, firstModel)
+            cache?.save(key, firstModel)
+            return translated
         } catch (missing: GeminiFailure) {
             if (missing.httpStatus != 404) throw missing
-            // API model availability is specific to each key/project. Refresh only on 404.
-            val models = listFlashLiteModels(key).filterNot { it == DEFAULT_MODEL }
-            for (model in models) {
-                try {
-                    return translateWithModel(key, text, reverse, model)
-                } catch (e: GeminiFailure) {
-                    if (e.httpStatus != 404) throw e
-                }
-            }
-            throw GeminiFailure(404, "NO_FLASH_LITE_MODEL")
+            // Only discover on a 404, not for every ordinary translation.
+            cache?.invalidate(key)
         }
+
+        val available = listFlashLiteModels(key)
+        // A stale cached model should not prevent trying the newest default.
+        val candidates = (listOf(DEFAULT_MODEL) + available).distinct()
+            .filterNot { it == firstModel }
+        for (model in candidates) {
+            if (!isValidFlashLiteModel(model)) continue
+            try {
+                val translated = translateWithModel(key, text, reverse, model)
+                cache?.save(key, model)
+                return translated
+            } catch (missing: GeminiFailure) {
+                if (missing.httpStatus != 404) throw missing
+            }
+        }
+        throw GeminiFailure(404, "NO_FLASH_LITE_MODEL")
     }
 
     private fun translateWithModel(key: String, text: String, reverse: Boolean, model: String): String {
@@ -92,7 +117,7 @@ internal object GeminiClient {
             connection.doOutput = true
             connection.setRequestProperty("x-goog-api-key", key)
             connection.setRequestProperty("Content-Type", "application/json; charset=utf-8")
-            connection.outputStream.use { it.write(request(text, reverse).toByteArray(Charsets.UTF_8)) }
+            connection.outputStream.use { it.write(request(text, reverse, model).toByteArray(Charsets.UTF_8)) }
             val status = connection.responseCode
             if (status != 200) {
                 // Google error bodies may include project metadata. Expose only the status and a
