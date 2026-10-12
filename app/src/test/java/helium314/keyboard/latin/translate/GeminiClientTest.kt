@@ -2,6 +2,9 @@
 package helium314.keyboard.latin.translate
 
 import org.json.JSONObject
+import java.io.IOException
+import java.net.HttpURLConnection
+import org.mockito.Mockito
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
@@ -72,6 +75,30 @@ class GeminiClientTest {
         assertEquals("gemini-3.1-flash-lite", cache.read("test-key-one"))
         cache.invalidate("test-key-one")
         assertNull(cache.read("test-key-one"))
+    }
+
+    @Test fun sseParserAppendsOnlyTranslatedTextNotThoughts() {
+        val line = """data: {"candidates":[{"content":{"parts":[
+            {"text":"Anh "},
+            {"thought":true,"text":"internal reasoning"},
+            {"text":"nhớ em."}
+        ]}}]}""".trimIndent().replace("\n", "")
+        assertEquals("Anh nhớ em.", GeminiClient.parseStreamText(line))
+        assertEquals("", GeminiClient.parseStreamText(": ping"))
+        assertEquals("", GeminiClient.parseStreamText("data: [DONE]"))
+        assertEquals("", GeminiClient.parseStreamText("data: invalid"))
+    }
+
+    @Test fun cancellationDisconnectsAndRejectsStaleRequests() {
+        val token = TranslationCancellation()
+        val connection = Mockito.mock(HttpURLConnection::class.java)
+        token.register(connection)
+        token.cancel()
+        Mockito.verify(connection).disconnect()
+        assertFailsWith<IOException> { token.check() }
+        val later = Mockito.mock(HttpURLConnection::class.java)
+        assertFailsWith<IOException> { token.register(later) }
+        Mockito.verify(later).disconnect()
     }
 
     @Test fun reverseDirectionChangesInstructions() {
