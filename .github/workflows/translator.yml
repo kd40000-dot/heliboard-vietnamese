@@ -85,8 +85,11 @@ jobs:
           APP=app/build/outputs/apk/debugNoMinify/HeliBoard_4.1-debugNoMinify.apk
           SIGNED=app/build/outputs/permanentlySigned/HeliBoard-Vietnamese-Telex-Gemini-signed.apk
           SIGNER="$ANDROID_HOME/build-tools/36.0.0/apksigner"
+          # apksigner consumes passwords from file streams; use separate files
+          # so the private-key password is not read at EOF.
+          cp "$PASSWORD_FILE" "$TMP/key-password.txt"
           "$SIGNER" sign --ks "$KEYSTORE" --ks-type PKCS12 --ks-key-alias heliboard \
-            --ks-pass "file:$PASSWORD_FILE" --key-pass "file:$PASSWORD_FILE" \
+            --ks-pass "file:$PASSWORD_FILE" --key-pass "file:$TMP/key-password.txt" \
             --v1-signing-enabled true --v2-signing-enabled true --v3-signing-enabled true \
             --out "$SIGNED" "$APP"
           "$SIGNER" verify --verbose --print-certs "$SIGNED" > "$TMP/signature.txt"
