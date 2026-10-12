@@ -9,7 +9,7 @@ import java.net.URL
 /** Network requests only after the user pauses typing. Never logs text or credentials. */
 internal object GeminiClient {
     private const val ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent"
+        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
 
     fun request(text: String, reverse: Boolean): String {
         val instruction = if (reverse) {
