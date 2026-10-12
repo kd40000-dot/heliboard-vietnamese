@@ -8,8 +8,42 @@ import java.net.URL
 
 /** Network requests only after the user pauses typing. Never logs text or credentials. */
 internal object GeminiClient {
-    private const val ENDPOINT =
-        "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent"
+    private const val MODELS_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models"
+    internal const val DEFAULT_MODEL = "gemini-3.1-flash-lite"
+
+    /** Only consider text-capable Flash-Lite models, never paid-tier Pro or preview variants. */
+    internal fun parseAvailableFlashLiteModels(json: String): List<String> {
+        val models = JSONObject(json).optJSONArray("models") ?: return emptyList()
+        val supported = mutableListOf<String>()
+        for (i in 0 until models.length()) {
+            val item = models.optJSONObject(i) ?: continue
+            val name = item.optString("name").removePrefix("models/")
+            if (!name.startsWith("gemini-") || !name.contains("flash-lite") ||
+                name.contains("preview") || name.contains("image") || name.contains("exp")) continue
+            val methods = item.optJSONArray("supportedGenerationMethods") ?: continue
+            if ((0 until methods.length()).none { methods.optString(it) == "generateContent" }) continue
+            supported.add(name)
+        }
+        return supported.distinct().sortedDescending()
+    }
+
+    private fun listFlashLiteModels(key: String): List<String> {
+        val connection = URL("$MODELS_ENDPOINT?pageSize=1000").openConnection() as HttpURLConnection
+        try {
+            connection.requestMethod = "GET"
+            connection.instanceFollowRedirects = false
+            connection.connectTimeout = 8000
+            connection.readTimeout = 8000
+            connection.setRequestProperty("x-goog-api-key", key)
+            val status = connection.responseCode
+            if (status != 200) throw GeminiFailure(status, "MODEL_DISCOVERY_FAILED")
+            return parseAvailableFlashLiteModels(
+                connection.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }
+            )
+        } finally {
+            connection.disconnect()
+        }
+    }
 
     fun request(text: String, reverse: Boolean): String {
         val instruction = if (reverse) {
@@ -31,7 +65,25 @@ internal object GeminiClient {
     }
 
     fun translate(key: String, text: String, reverse: Boolean): String {
-        val connection = URL(ENDPOINT).openConnection() as HttpURLConnection
+        try {
+            return translateWithModel(key, text, reverse, DEFAULT_MODEL)
+        } catch (missing: GeminiFailure) {
+            if (missing.httpStatus != 404) throw missing
+            // API model availability is specific to each key/project. Refresh only on 404.
+            val models = listFlashLiteModels(key).filterNot { it == DEFAULT_MODEL }
+            for (model in models) {
+                try {
+                    return translateWithModel(key, text, reverse, model)
+                } catch (e: GeminiFailure) {
+                    if (e.httpStatus != 404) throw e
+                }
+            }
+            throw GeminiFailure(404, "NO_FLASH_LITE_MODEL")
+        }
+    }
+
+    private fun translateWithModel(key: String, text: String, reverse: Boolean, model: String): String {
+        val connection = URL("$MODELS_ENDPOINT/$model:generateContent").openConnection() as HttpURLConnection
         try {
             connection.requestMethod = "POST"
             connection.instanceFollowRedirects = false
@@ -73,7 +125,7 @@ internal class GeminiFailure(val httpStatus: Int, val apiStatus: String) : Excep
         httpStatus == 400 -> "Gemini HTTP 400: Request rejected (INVALID_ARGUMENT)."
         httpStatus == 401 -> "Gemini HTTP 401: Invalid API key."
         httpStatus == 403 -> "Gemini HTTP 403: API key or project access denied."
-        httpStatus == 404 -> "Gemini HTTP 404: Translation model unavailable for this key."
+        httpStatus == 404 -> "Gemini HTTP 404: No compatible Flash-Lite model for this API key."
         httpStatus == 429 -> "Gemini HTTP 429: Free quota or rate limit reached."
         httpStatus in 500..599 -> "Gemini HTTP $httpStatus: Google server temporarily unavailable."
         httpStatus == 200 -> "Gemini returned no translation. Try different text."
