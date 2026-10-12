@@ -34,6 +34,7 @@ import kotlinx.coroutines.withContext
 class TranslatorActivity : ComponentActivity() {
     private val handler = Handler(Looper.getMainLooper())
     private var request: Job? = null
+    private var activeCancellation: TranslationCancellation? = null
     private var revision = 0
     private val token get() = intent.getStringExtra("session")
     private lateinit var source: EditText
@@ -51,6 +52,13 @@ class TranslatorActivity : ComponentActivity() {
     private fun clearTimeout() {
         timeoutGuard?.let { handler.removeCallbacks(it) }
         timeoutGuard = null
+    }
+
+    private fun stopRequest() {
+        activeCancellation?.cancel()
+        activeCancellation = null
+        request?.cancel()
+        request = null
     }
     private fun showFailure(message: String) {
         if (!::preview.isInitialized || !::action.isInitialized) return
@@ -226,7 +234,7 @@ class TranslatorActivity : ComponentActivity() {
     private fun invalidateTranslation() {
         revision++
         handler.removeCallbacks(debounce)
-        request?.cancel()
+        stopRequest()
         clearTimeout()
         result = null
         if (::action.isInitialized) {
@@ -254,31 +262,50 @@ class TranslatorActivity : ComponentActivity() {
 
         handler.removeCallbacks(debounce)
         clearTimeout()
-        request?.cancel()
+        stopRequest()
         val sequence = ++revision
         val directionValue = reverse
         val credential = key
+        val cancellation = TranslationCancellation()
+        activeCancellation = cancellation
         result = null
         preview.text = "Translating…"
         action.text = "Insert"
         action.isEnabled = false
 
-        // Android may cancel a coroutine while an HTTP request is suspended, without ever
-        // resuming the success/error UI. This main-thread watchdog always exits loading.
+        // Hard upper bound for unusual server stalls. Short read timeouts were
+        // incorrectly rejecting valid slow Gemini responses before they arrived.
         val guard = Runnable {
             if (sequence == revision && !finished && TranslationSession.valid(token)) {
                 revision++
-                request?.cancel()
-                showFailure("Gemini timed out after 25 seconds. Tap Retry.")
+                stopRequest()
+                showFailure("Gemini did not finish within 65 seconds. Tap Retry.")
             }
         }
         timeoutGuard = guard
-        handler.postDelayed(guard, 25_000L)
+        handler.postDelayed(guard, 65_000L)
+        handler.postDelayed({
+            if (sequence == revision && result == null && !finished &&
+                preview.text.toString() == "Translating…") {
+                preview.text = "Waiting for Gemini…"
+            }
+        }, 10_000L)
 
         request = lifecycleScope.launch {
             val answer = try {
                 withContext(Dispatchers.IO) {
-                    runCatching { GeminiClient.translate(credential, input, directionValue, modelCache) }
+                    runCatching {
+                        GeminiClient.translate(
+                            credential, input, directionValue, modelCache, cancellation
+                        ) { partial ->
+                            handler.post {
+                                if (sequence == revision && !finished && result == null &&
+                                    TranslationSession.valid(token)) {
+                                    preview.text = partial
+                                }
+                            }
+                        }
+                    }
                 }
             } catch (e: kotlinx.coroutines.CancellationException) {
                 // Invalidation or Activity shutdown; the watchdog handles unexpected stalls.
@@ -286,6 +313,7 @@ class TranslatorActivity : ComponentActivity() {
             }
             if (sequence != revision || !TranslationSession.valid(token) || finished) return@launch
             clearTimeout()
+            activeCancellation = null
             answer.onSuccess {
                 result = it
                 preview.text = it
@@ -295,7 +323,7 @@ class TranslatorActivity : ComponentActivity() {
                 showFailure((it as? GeminiFailure)?.userMessage()
                     ?: "Network error: " + when (it) {
                         is java.net.UnknownHostException -> "No DNS connection"
-                        is java.net.SocketTimeoutException -> "Connection timed out"
+                        is java.net.SocketTimeoutException -> "Gemini did not respond in time. Tap Retry."
                         is javax.net.ssl.SSLException -> "Secure connection failed"
                         else -> "Could not connect to Gemini"
                     })
@@ -307,7 +335,7 @@ class TranslatorActivity : ComponentActivity() {
         finished = true
         handler.removeCallbacks(debounce)
         clearTimeout()
-        request?.cancel()
+        stopRequest()
         TranslationSession.complete(token, null)
         finish()
     }
@@ -318,7 +346,7 @@ class TranslatorActivity : ComponentActivity() {
     override fun onDestroy() {
         handler.removeCallbacks(debounce)
         clearTimeout()
-        request?.cancel()
+        stopRequest()
         super.onDestroy()
     }
     private fun dp(value: Int) = (resources.displayMetrics.density * value).toInt()
