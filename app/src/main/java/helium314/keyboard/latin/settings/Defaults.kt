@@ -47,7 +47,7 @@ object Defaults {
     const val PREF_THEME_STYLE = KeyboardTheme.STYLE_MATERIAL
     fun PREF_ICON_STYLE(prefs: SharedPreferences) = prefs.getString(Settings.PREF_THEME_STYLE, PREF_THEME_STYLE)!!
     const val PREF_THEME_COLORS = KeyboardTheme.THEME_LIGHT
-    const val PREF_THEME_COLORS_NIGHT = KeyboardTheme.THEME_DARK
+    const val PREF_THEME_COLORS_NIGHT = "Dracula"
     const val PREF_THEME_KEY_BORDERS = false
     @JvmField
     val PREF_THEME_DAY_NIGHT = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
@@ -74,7 +74,7 @@ object Defaults {
     const val PREF_ALWAYS_SHOW_SUGGESTIONS_EXCEPT_WEB_TEXT = true
     const val PREF_KEY_USE_PERSONALIZED_DICTS = true
     const val PREF_KEY_USE_DOUBLE_SPACE_PERIOD = true
-    const val PREF_BLOCK_POTENTIALLY_OFFENSIVE = true
+    const val PREF_BLOCK_POTENTIALLY_OFFENSIVE = false
     const val PREF_SHOW_LANGUAGE_SWITCH_KEY = false
     const val PREF_LANGUAGE_SWITCH_KEY = "internal"
     const val PREF_SHOW_EMOJI_KEY = false
@@ -160,8 +160,8 @@ object Defaults {
     const val PREF_ADD_TO_PERSONAL_DICTIONARY = false
     @JvmField
     val PREF_NAVBAR_COLOR = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
-    const val PREF_ENABLED_SUBTYPES = ""
-    const val PREF_SELECTED_SUBTYPE = ""
+    const val PREF_ENABLED_SUBTYPES = "en-US§SupportTouchPositionCorrection,TrySuppressingImeSwitcher;es-US§KeyboardLayoutSet=MAIN:qwerty+;vi§CombiningRules=vi_telex"
+    const val PREF_SELECTED_SUBTYPE = "en-US§SupportTouchPositionCorrection,TrySuppressingImeSwitcher"
     const val PREF_URL_DETECTION = false
     const val PREF_DONT_SHOW_MISSING_DICTIONARY_DIALOG = false
     const val PREF_TOOLBAR_MODE = "EXPANDABLE"
@@ -169,7 +169,7 @@ object Defaults {
     const val PREF_TOOLBAR_SWIPE_DOWN_TO_HIDE = false
     const val PREF_QUICK_PIN_TOOLBAR_KEYS = false
     val PREF_PINNED_TOOLBAR_KEYS = defaultPinnedToolbarPref
-    val PREF_TOOLBAR_KEYS = defaultToolbarPref
+    val PREF_TOOLBAR_KEYS = "SETTINGS:true|VOICE:true|CLIPBOARD:true|UNDO:true|REDO:true|SELECT_WORD:true|COPY:true|PASTE:true|LEFT:true|RIGHT:true|NUMPAD:false|DPAD:false|SELECT_ALL:false|CUT:false|ONE_HANDED:false|FLOATING:false|SPLIT:false|INCOGNITO:false|AUTOCORRECT:false|CLEAR_CLIPBOARD:false|EMOJI:true|UP:false|DOWN:false|WORD_LEFT:false|WORD_RIGHT:false|PAGE_UP:false|PAGE_DOWN:false|FULL_LEFT:false|FULL_RIGHT:false|PAGE_START:false|PAGE_END:false|BACKGROUND_GATHERING:false"
     const val PREF_AUTO_SHOW_TOOLBAR = false
     const val PREF_AUTO_HIDE_TOOLBAR = false
     val PREF_CLIPBOARD_TOOLBAR_KEYS = defaultClipboardToolbarPref
@@ -190,7 +190,7 @@ object Defaults {
     const val PREF_USER_COLORS = "[]"
     const val PREF_USER_MORE_COLORS = 0
     const val PREF_USER_ALL_COLORS = ""
-    const val PREF_SAVE_SUBTYPE_PER_APP = false
+    const val PREF_SAVE_SUBTYPE_PER_APP = true
     const val PREF_SPELLCHECK_SUGGEST = true
     const val PREF_SHOW_ONLY_TOOLBAR_WITH_HARDWARE_KEYBOARD = false
 }

@@ -17,8 +17,8 @@ import javax.crypto.spec.GCMParameterSpec
 internal class TranslationKeyStore(context: Context) {
     // The normal app context is credential-protected; noBackupFilesDir is excluded from backups.
     private val storage = context
-    private val file get() = File(storage.noBackupFilesDir, "deepl-key")
-    private val alias = "helium314.deepl"
+    private val file get() = File(storage.noBackupFilesDir, "gemini-key")
+    private val alias = "helium314.gemini"
 
     private fun key(): SecretKey {
         val store = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
