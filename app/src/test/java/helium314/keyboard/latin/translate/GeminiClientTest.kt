@@ -29,6 +29,28 @@ class GeminiClientTest {
         assertFalse(GeminiFailure(403, "PERMISSION_DENIED").userMessage().contains("API_KEY"))
     }
 
+    @Test fun parsesOnlyTextCapableStableFlashLiteModels() {
+        val response = """
+            {
+              "models": [
+                {"name":"models/gemini-3.1-flash-lite","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemini-2.5-flash-lite","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemini-3.1-flash-lite-preview","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemini-3.1-flash-lite-image","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemini-3.5-pro","supportedGenerationMethods":["generateContent"]},
+                {"name":"models/gemini-3.1-flash-lite-incompatible","supportedGenerationMethods":["embedContent"]},
+                {"name":"models/gemini-3.1-flash-lite","supportedGenerationMethods":["generateContent"]}
+              ]
+            }
+        """.trimIndent()
+        assertEquals(
+            listOf("gemini-3.1-flash-lite", "gemini-2.5-flash-lite"),
+            GeminiClient.parseAvailableFlashLiteModels(response)
+        )
+        assertEquals("gemini-3.1-flash-lite", GeminiClient.DEFAULT_MODEL)
+        assertTrue(GeminiClient.parseAvailableFlashLiteModels("{}").isEmpty())
+    }
+
     @Test fun reverseDirectionChangesInstructions() {
         val body = JSONObject(GeminiClient.request("Em nhớ anh.", true))
         val system = body.getJSONObject("systemInstruction").getJSONArray("parts")
