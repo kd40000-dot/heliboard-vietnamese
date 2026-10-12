@@ -5,6 +5,7 @@ import org.json.JSONObject
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.robolectric.RobolectricTestRunner
+import org.robolectric.RuntimeEnvironment
 import kotlin.test.*
 
 @RunWith(RobolectricTestRunner::class)
@@ -49,6 +50,28 @@ class GeminiClientTest {
         )
         assertEquals("gemini-3.1-flash-lite", GeminiClient.DEFAULT_MODEL)
         assertTrue(GeminiClient.parseAvailableFlashLiteModels("{}").isEmpty())
+    }
+
+    @Test fun minimalThinkingOnlyForGemini3() {
+        val request = JSONObject(GeminiClient.request("Hello", false))
+        val config = request.getJSONObject("generationConfig")
+        assertEquals("minimal", config.getJSONObject("thinkingConfig").getString("thinkingLevel"))
+        assertEquals(160, config.getInt("maxOutputTokens"))
+        val fallback = JSONObject(GeminiClient.request("Hello", false, "gemini-2.5-flash-lite"))
+        assertFalse(fallback.getJSONObject("generationConfig").has("thinkingConfig"))
+    }
+
+    @Test fun cacheUsesApiKeyFingerprintAndRejectsUnsupportedModels() {
+        val cache = TranslationModelCache(RuntimeEnvironment.getApplication())
+        cache.save("test-key-one", "gemini-3.1-flash-lite")
+        assertEquals("gemini-3.1-flash-lite", cache.read("test-key-one"))
+        assertNull(cache.read("test-key-two"))
+        cache.save("test-key-one", "gemini-3.1-pro")
+        assertEquals("gemini-3.1-flash-lite", cache.read("test-key-one"))
+        cache.invalidate("test-key-two")
+        assertEquals("gemini-3.1-flash-lite", cache.read("test-key-one"))
+        cache.invalidate("test-key-one")
+        assertNull(cache.read("test-key-one"))
     }
 
     @Test fun reverseDirectionChangesInstructions() {
